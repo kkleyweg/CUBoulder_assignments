@@ -1,0 +1,102 @@
+---
+title: "NYPD_Shooting"
+author: "anonymized for grading"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# NYPD Shooting Incident Report
+
+
+```{r get_data}
+library(tidyverse)
+
+url = "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+NYPD_data = read_csv(url)
+summary(NYPD_data)
+```
+
+We have several columns with large amounts of missing data, such as the PERP columns. With so much data unavailable, I have chosen to remove those columns in order to focus on the complete columns that will allow us to maintain a large number of samples while still being able to draw conclusions.
+
+## Tidy things up
+
+```{r cleaning}
+NYPD_data <- NYPD_data %>%
+  select(c(OCCUR_DATE,BORO,STATISTICAL_MURDER_FLAG))
+
+NYPD_data$OCCUR_DATE = as.Date(NYPD_data$OCCUR_DATE,format="%m/%d/%Y")
+NYPD_data$SHOOTINGS = 1
+
+NYPD_data <- NYPD_data %>%
+  group_by(OCCUR_DATE,BORO) %>%
+  summarize(SHOOTINGS = sum(SHOOTINGS), MURDERS = sum(STATISTICAL_MURDER_FLAG))
+
+
+summary(NYPD_data)
+```
+
+I have trimmed our data set to the Date of the event, the borough it occurred in, and whether the victim was murdered. Then I grouped it together and added a column to see total number of shootings per day, per borough, and how many of those resulted in murder.
+
+# Plotting
+
+```{r plot1}
+nypd_boro_monthly <- NYPD_data %>%
+  group_by(format(OCCUR_DATE,"%Y"),BORO) %>%
+  summarize(SHOOTINGS=sum(SHOOTINGS),MURDERS=sum(MURDERS)) #make a monthly breakdown of boro shootings
+colnames(nypd_boro_monthly)[1]<-"OCCUR_DATE"
+nypd_boro_monthly$OCCUR_DATE = as.Date(nypd_boro_monthly$OCCUR_DATE,format="%Y")
+
+nypd_monthly <- nypd_boro_monthly %>%
+  group_by(OCCUR_DATE) %>%
+  summarize(SHOOTINGS=sum(SHOOTINGS),MURDERS=sum(MURDERS)) #make a monthly breakdown of total NY shootings
+
+
+
+nypd_monthly %>%
+  ggplot(aes(x= OCCUR_DATE,y=SHOOTINGS)) + 
+  geom_line(aes(color="shootings")) +
+  geom_point(aes(color="shootings")) +
+  geom_line(aes(y= MURDERS, color="murders")) +
+  geom_point(aes(y=MURDERS, color="murders")) +
+  theme(legend.position = "top") + 
+  labs(title = "NYC Shootings By Month", y=NULL)
+```
+
+
+This first graph raises an interesting question as we look at the trend of shootings over time. Murders have not changed much, but shootings had a large uptick. What happened in 2021 to cause such a spike? Was it the same across NYC, or was it distributed unevenly across the boroughs?
+
+
+```{r plot2}
+nypd_boro_monthly %>%
+  ggplot(aes(x= OCCUR_DATE,y=SHOOTINGS)) +
+  geom_line(aes(OCCUR_DATE, SHOOTINGS, group=BORO,color=BORO)) +
+  theme(legend.position = "top") + 
+  labs(title = "NYC Monthly Shootings by Borough")
+```
+
+This graph shows us which boroughs have more shootings, and that they stay relatively even over time. We still have the same large uptick in 2021, which affected all boroughs except Staten Island.
+
+```{r modeling}
+mod = lm(SHOOTINGS ~ BORO,data=nypd_boro_monthly)
+summary(mod)
+
+```
+
+So what does this model tell us? The intercept is the expected number of shootings per year in the Bronx, with the other four coefficients being the expected number of shootings in the other four boroughs (for example, Brooklyn is expected to have 165 more shootings, so 630.3).
+
+### In Conclusion
+
+From looking at these graphs, we have discovered a couple things. We noted that there was a large spike of shootings in New York in 2021, and have been slow to fall off. We also learned that Bronx and Brooklyn are the two boroughs more likely to have a shooting than any of the other five.
+
+Some potential biases of this analysis: The population of the city may be changing enough to affect the overall number of shootings, and would affect the number of shootings per location. My biases and prior knowledge of each borough may be coloring my perception of the borough data, leading me to the thinking that Bronx and Brooklyn have more shootings but the relative amounts may change when the data is normalized for population, density, area, or other statistics unavailable in this dataset.
+
+
+Session Info below.
+```{r sessionInfo, echo=FALSE}
+sessionInfo()
+```
